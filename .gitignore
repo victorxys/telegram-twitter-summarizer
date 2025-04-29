@@ -1,0 +1,20 @@
+# Environment variables - DO NOT COMMIT!
+.env
+
+# Virtual environment
+venv/
+*/venv/
+.venv/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE specific files (add more based on your IDE)
+.idea/
+.vscode/
+
+# OS specific files
+.DS_Store
+Thumbs.db
