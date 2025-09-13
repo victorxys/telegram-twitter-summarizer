@@ -42,3 +42,4 @@ typing-inspection
 typing_extensions
 uritemplate
 urllib3
+notion-client
