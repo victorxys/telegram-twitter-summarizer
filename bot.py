@@ -195,7 +195,7 @@ def worker(application: Application, loop: asyncio.AbstractEventLoop):
             time.sleep(15)
 
 # --- Telegram Bot 处理函数 ---
-def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
     if not message or not message.text:
         return
@@ -229,7 +229,7 @@ def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 # --- /start 命令处理 ---
-def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_html(
         rf"你好 {user.mention_html()}！请转发 Twitter/X 链接给我，我会自动总结并存入你的 Notion 数据库。",
