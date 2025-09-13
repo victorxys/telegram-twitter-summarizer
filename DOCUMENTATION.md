@@ -130,6 +130,7 @@ Your response MUST be a single JSON object and nothing else.
 *   **AI 输出 (JSON):**
     ```json
     {
+      "title": "这是ai总结的title...",
       "summary": "这篇推文讨论了...",
       "matched_tags": ["#Tech", "#AI"],
       "ai_suggested_tag": "#LanguageModel"
