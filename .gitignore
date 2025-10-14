@@ -194,3 +194,4 @@ cython_debug/
 .pypirc
 
 GEMINI.md
+.ini

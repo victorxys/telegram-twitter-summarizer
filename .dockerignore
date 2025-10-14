@@ -1,0 +1,23 @@
+# Git files
+.git
+.gitignore
+
+# Docker files
+.dockerignore
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+
+# Environment variables - DO NOT COMMIT TO IMAGE
+.env
+
+# Documentation & Test files
+*.md
+gemini_test.py
+.ini

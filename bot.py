@@ -39,12 +39,13 @@ gemini_model = None
 if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-        logger.info("Gemini API 配置成功。")
+        # models/gemini-2.5-flash
+        gemini_model = genai.GenerativeModel('gemini-2.5-flash')
+        logger.info("Gemini API 配置成功。 সন")
     except Exception as e:
         logger.error(f"配置 Gemini API 失败: {e}")
 else:
-    logger.warning("GEMINI_API_KEY 未设置，总结和标签生成功能将不可用。")
+    logger.warning("GEMINI_API_KEY 未设置，总结和标签生成功能将不可用。 সন")
 
 # 推文处理队列
 tweet_queue = queue.Queue()
@@ -53,7 +54,7 @@ tweet_queue = queue.Queue()
 def get_tweet_data(tweet_url: str) -> dict | None:
     logger.info(f"尝试通过 Twitter API v2 获取推文数据: {tweet_url}")
     if not TWITTER_BEARER_TOKEN:
-        logger.error("TWITTER_BEARER_TOKEN 未设置。")
+        logger.error("TWITTER_BEARER_TOKEN 未设置。 সন")
         return None
     match = re.search(r'/status/(\d+)', tweet_url)
     if not match:
@@ -68,10 +69,10 @@ def get_tweet_data(tweet_url: str) -> dict | None:
             logger.error(f"Twitter API v2 错误 for {tweet_id}: {response.errors}")
             return None
         if not response.data:
-            logger.warning(f"Twitter API v2 未找到推文 {tweet_id} 数据。")
+            logger.warning(f"Twitter API v2 未找到推文 {tweet_id} 数据。 সন")
             return None
         tweet = response.data
-        logger.info(f"通过 Twitter API v2 获取成功: Text='{tweet.text[:50]}...'")
+        logger.info(f"通过 Twitter API v2 获取成功: Text='{tweet.text[:50]}...' সন")
         return {"text": tweet.text, "url": tweet_url}
     except tweepy.errors.TweepyException as e:
         logger.error(f"获取推文 {tweet_id} 时发生 Tweepy 错误: {e}")
@@ -83,10 +84,10 @@ def get_tweet_data(tweet_url: str) -> dict | None:
 # --- 重构后的 Gemini 总结与标签生成函数 ---
 def get_summary_and_tags(text: str, existing_tags: list[str]) -> dict | None:
     if not gemini_model:
-        logger.error("Gemini 模型未初始化。")
+        logger.error("Gemini 模型未初始化。 সন")
         return None
     if not text:
-        logger.info("推文内容为空，不进行总结。")
+        logger.info("推文内容为空，不进行总结。 সন")
         return None
 
     prompt = f"""
@@ -134,12 +135,12 @@ def worker(application: Application, loop: asyncio.AbstractEventLoop):
     """
     后台工作线程，用于顺序处理队列中的任务。
     """
-    logger.info("后台工人线程已启动。")
+    logger.info("后台工人线程已启动。 সন")
 
     while True:
-        tweet_url, chat_id, status_message_id = tweet_queue.get()
+        tweet_url, chat_id, status_message_id, original_message_id = tweet_queue.get()
         try:
-            logger.info(f"工人: 开始处理来自聊天 {chat_id} 的链接: {tweet_url}")
+            logger.info(f"工人: 开始处理来自聊天 {chat_id} 的链接: {tweet_url} (原始消息ID: {original_message_id})")
 
             # --- 线程安全的 Telegram 通信辅助函数 ---
             def edit_status_message(text: str):
@@ -149,6 +150,15 @@ def worker(application: Application, loop: asyncio.AbstractEventLoop):
                     future.result(timeout=10)
                 except Exception as e:
                     logger.error(f"从 worker 线程编辑消息时出错: {e}")
+
+            def delete_message_safely(msg_id: int):
+                coro = application.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                future = asyncio.run_coroutine_threadsafe(coro, loop)
+                try:
+                    future.result(timeout=10)
+                    logger.info(f"成功删除消息 {msg_id} from chat {chat_id}")
+                except Exception as e:
+                    logger.error(f"从 worker 线程删除消息 {msg_id} 时出错: {e}")
 
             # 1. 更新状态为“正在处理”
             edit_status_message(f"⚙️ 正在处理链接...\n{tweet_url}")
@@ -163,7 +173,7 @@ def worker(application: Application, loop: asyncio.AbstractEventLoop):
             # 3. 从 Notion 获取标签
             existing_tags = notion_utils.get_tags_from_database()
             if not existing_tags:
-                logger.warning("工人: 未能从 Notion 获取标签，将使用空列表。")
+                logger.warning("工人: 未能从 Notion 获取标签，将使用空列表。 সন")
 
             # 4. 使用 Gemini 生成总结和标签
             ai_result = get_summary_and_tags(tweet_data["text"], existing_tags)
@@ -183,6 +193,10 @@ def worker(application: Application, loop: asyncio.AbstractEventLoop):
 
             logger.info(f"工人: 成功处理并存储链接: {tweet_url}")
             edit_status_message(f"✅ 已存入 Notion: {ai_result['title']}\n{tweet_url}")
+
+            # 删除原始消息
+            delete_message_safely(original_message_id)
+            logger.info(f"工人: 已删除原始消息 {original_message_id}")
 
         except Exception as e:
             logger.error(f"工人线程发生未知错误: {e}", exc_info=True)
@@ -210,7 +224,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     twitter_links = []
     for link in all_links:
         if link and ("twitter.com" in link or "x.com" in link) and "/status/" in link:
-            cleaned_url = re.sub(r'\?.*$', '', link)
+            cleaned_url = re.sub(r'\?.*', '', link)
             if cleaned_url not in twitter_links:
                 twitter_links.append(cleaned_url)
 
@@ -222,17 +236,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     status_message = await message.reply_text(reply_text, reply_to_message_id=message.message_id)
     status_message_id = status_message.message_id
 
-    # 将任务（包含状态消息的ID）放入队列
+    # 将任务（包含原始消息ID和状态消息ID）放入队列
     for url in twitter_links:
-        tweet_queue.put((url, message.chat_id, status_message_id))
-        logger.info(f"链接已加入队列: {url} (来自聊天 {message.chat_id})，状态消息ID: {status_message_id}")
+        tweet_queue.put((url, message.chat_id, status_message_id, message.message_id))
+        logger.info(f"链接已加入队列: {url} (来自聊天 {message.chat_id})，原始消息ID: {message.message_id}，状态消息ID: {status_message_id}")
 
 
 # --- /start 命令处理 ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_html(
-        rf"你好 {user.mention_html()}！请转发 Twitter/X 链接给我，我会自动总结并存入你的 Notion 数据库。",
+        rf"你好 {user.mention_html()}！请转发 Twitter/X 链接给我，我会自动总结并存入你的 Notion 数据库。 সন",
     )
 
 
@@ -240,7 +254,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 def main() -> None:
     # 检查关键环境变量
     if not all([TELEGRAM_BOT_TOKEN, TWITTER_BEARER_TOKEN, GEMINI_API_KEY, notion_utils.NOTION_API_KEY, notion_utils.NOTION_DATABASE_ID]):
-        logger.critical("一个或多个关键环境变量未设置！请检查 .env 文件。机器人无法启动。")
+        logger.critical("一个或多个关键环境变量未设置！请检查 .env 文件。机器人无法启动。 সন")
         return
 
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
