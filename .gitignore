@@ -195,3 +195,4 @@ cython_debug/
 
 GEMINI.md
 .ini
+build.sh

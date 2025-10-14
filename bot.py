@@ -41,11 +41,11 @@ if GEMINI_API_KEY:
         genai.configure(api_key=GEMINI_API_KEY)
         # models/gemini-2.5-flash
         gemini_model = genai.GenerativeModel('gemini-2.5-flash')
-        logger.info("Gemini API 配置成功。 সন")
+        logger.info("Gemini API 配置成功。 ")
     except Exception as e:
         logger.error(f"配置 Gemini API 失败: {e}")
 else:
-    logger.warning("GEMINI_API_KEY 未设置，总结和标签生成功能将不可用。 সন")
+    logger.warning("GEMINI_API_KEY 未设置，总结和标签生成功能将不可用。 ")
 
 # 推文处理队列
 tweet_queue = queue.Queue()
@@ -54,7 +54,7 @@ tweet_queue = queue.Queue()
 def get_tweet_data(tweet_url: str) -> dict | None:
     logger.info(f"尝试通过 Twitter API v2 获取推文数据: {tweet_url}")
     if not TWITTER_BEARER_TOKEN:
-        logger.error("TWITTER_BEARER_TOKEN 未设置。 সন")
+        logger.error("TWITTER_BEARER_TOKEN 未设置。 ")
         return None
     match = re.search(r'/status/(\d+)', tweet_url)
     if not match:
@@ -69,10 +69,10 @@ def get_tweet_data(tweet_url: str) -> dict | None:
             logger.error(f"Twitter API v2 错误 for {tweet_id}: {response.errors}")
             return None
         if not response.data:
-            logger.warning(f"Twitter API v2 未找到推文 {tweet_id} 数据。 সন")
+            logger.warning(f"Twitter API v2 未找到推文 {tweet_id} 数据。 ")
             return None
         tweet = response.data
-        logger.info(f"通过 Twitter API v2 获取成功: Text='{tweet.text[:50]}...' সন")
+        logger.info(f"通过 Twitter API v2 获取成功: Text='{tweet.text[:50]}...' ")
         return {"text": tweet.text, "url": tweet_url}
     except tweepy.errors.TweepyException as e:
         logger.error(f"获取推文 {tweet_id} 时发生 Tweepy 错误: {e}")
@@ -84,10 +84,10 @@ def get_tweet_data(tweet_url: str) -> dict | None:
 # --- 重构后的 Gemini 总结与标签生成函数 ---
 def get_summary_and_tags(text: str, existing_tags: list[str]) -> dict | None:
     if not gemini_model:
-        logger.error("Gemini 模型未初始化。 সন")
+        logger.error("Gemini 模型未初始化。 ")
         return None
     if not text:
-        logger.info("推文内容为空，不进行总结。 সন")
+        logger.info("推文内容为空，不进行总结。 ")
         return None
 
     prompt = f"""
@@ -135,7 +135,7 @@ def worker(application: Application, loop: asyncio.AbstractEventLoop):
     """
     后台工作线程，用于顺序处理队列中的任务。
     """
-    logger.info("后台工人线程已启动。 সন")
+    logger.info("后台工人线程已启动。 ")
 
     while True:
         tweet_url, chat_id, status_message_id, original_message_id = tweet_queue.get()
@@ -173,7 +173,7 @@ def worker(application: Application, loop: asyncio.AbstractEventLoop):
             # 3. 从 Notion 获取标签
             existing_tags = notion_utils.get_tags_from_database()
             if not existing_tags:
-                logger.warning("工人: 未能从 Notion 获取标签，将使用空列表。 সন")
+                logger.warning("工人: 未能从 Notion 获取标签，将使用空列表。")
 
             # 4. 使用 Gemini 生成总结和标签
             ai_result = get_summary_and_tags(tweet_data["text"], existing_tags)
@@ -246,7 +246,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_html(
-        rf"你好 {user.mention_html()}！请转发 Twitter/X 链接给我，我会自动总结并存入你的 Notion 数据库。 সন",
+        rf"你好 {user.mention_html()}！请转发 Twitter/X 链接给我，我会自动总结并存入你的 Notion 数据库。",
     )
 
 
@@ -254,7 +254,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 def main() -> None:
     # 检查关键环境变量
     if not all([TELEGRAM_BOT_TOKEN, TWITTER_BEARER_TOKEN, GEMINI_API_KEY, notion_utils.NOTION_API_KEY, notion_utils.NOTION_DATABASE_ID]):
-        logger.critical("一个或多个关键环境变量未设置！请检查 .env 文件。机器人无法启动。 সন")
+        logger.critical("一个或多个关键环境变量未设置！请检查 .env 文件。机器人无法启动。 ")
         return
 
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()

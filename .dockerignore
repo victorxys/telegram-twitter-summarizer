@@ -21,3 +21,5 @@ venv/
 *.md
 gemini_test.py
 .ini
+
+build.sh
