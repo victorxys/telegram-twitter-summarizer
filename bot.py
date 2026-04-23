@@ -14,7 +14,8 @@ import asyncio
 import google.generativeai as genai
 from telegram import Update, MessageEntity
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import tweepy
+import requests
+from ntscraper import Nitter
 
 # --- 自定义模块导入 (现在是安全的) ---
 import notion_utils
@@ -22,7 +23,7 @@ import notion_utils
 # --- 配置 ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
+# 已移除过时的 TWITTER_BEARER_TOKEN
 
 # 日志配置
 logging.basicConfig(
@@ -40,7 +41,7 @@ if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         # models/gemini-2.5-flash
-        gemini_model = genai.GenerativeModel('gemini-2.5-flash')
+        gemini_model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
         logger.info("Gemini API 配置成功。 ")
     except Exception as e:
         logger.error(f"配置 Gemini API 失败: {e}")
@@ -51,35 +52,62 @@ else:
 tweet_queue = queue.Queue()
 
 # --- Twitter 内容抓取函数 (基本保持不变) ---
+# --- Twitter 内容抓取函数 (纯非官方多策略) ---
 def get_tweet_data(tweet_url: str) -> dict | None:
-    logger.info(f"尝试通过 Twitter API v2 获取推文数据: {tweet_url}")
-    if not TWITTER_BEARER_TOKEN:
-        logger.error("TWITTER_BEARER_TOKEN 未设置。 ")
-        return None
     match = re.search(r'/status/(\d+)', tweet_url)
     if not match:
         logger.error(f"无法从 URL 中解析 Tweet ID: {tweet_url}")
         return None
     tweet_id = match.group(1)
-    logger.info(f"解析得到 Tweet ID: {tweet_id}")
+    
+    # 获取用户名的正则表达式 (备选，部分接口可能需要)
+    user_match = re.search(r'(?:twitter\.com|x\.com)/([^/]+)/status/', tweet_url)
+    username = user_match.group(1) if user_match else "i"
+
+    # 策略 1: API 阵列 (基于 JSON 的镜像接口)
+    # vxtwitter, fxtwitter, fixupx 等
+    endpoints = [
+        f"https://api.vxtwitter.com/{username}/status/{tweet_id}",
+        f"https://api.fxtwitter.com/{username}/status/{tweet_id}"
+    ]
+
+    for url in endpoints:
+        logger.info(f"尝试通过非官方 API 获取: {url}")
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    # 某些接口返回 200 但内容是错误信息
+                    if data and (data.get("text") or data.get("description")):
+                        content = data.get("text") or data.get("description")
+                        logger.info(f"获取成功 (API): {content[:50]}...")
+                        return {"text": content, "url": tweet_url}
+                except ValueError:
+                    logger.warning(f"接口 {url} 返回了非 JSON 内容，跳过。")
+            else:
+                logger.warning(f"接口 {url} 响应异常: {response.status_code}")
+        except Exception as e:
+            logger.warning(f"接口 {url} 请求出错: {e}")
+
+    # 策略 2: 使用 ntscraper (抓取 Nitter 镜像)
+    logger.info(f"所有 API 接口均失效，尝试使用 ntscraper 抓取...")
     try:
-        client = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN, wait_on_rate_limit=True)
-        response = client.get_tweet(id=tweet_id, tweet_fields=['created_at', 'text'])
-        if response.errors:
-            logger.error(f"Twitter API v2 错误 for {tweet_id}: {response.errors}")
-            return None
-        if not response.data:
-            logger.warning(f"Twitter API v2 未找到推文 {tweet_id} 数据。 ")
-            return None
-        tweet = response.data
-        logger.info(f"通过 Twitter API v2 获取成功: Text='{tweet.text[:50]}...' ")
-        return {"text": tweet.text, "url": tweet_url}
-    except tweepy.errors.TweepyException as e:
-        logger.error(f"获取推文 {tweet_id} 时发生 Tweepy 错误: {e}")
-        return None
+        scraper = Nitter(log_level=1)
+        # 尝试从 Nitter 抓取单个推文
+        tweet = scraper.get_tweets(username, mode='term', number=1)
+        # 注意：ntscraper 获取的是列表，我们需要找到匹配 ID 的那个
+        if tweet and 'tweets' in tweet and len(tweet['tweets']) > 0:
+            for t in tweet['tweets']:
+                # 模糊匹配 ID 或通过内容尝试
+                if tweet_id in t.get('link', '') or not tweet_id:
+                    logger.info("ntscraper 抓取成功。")
+                    return {"text": t.get('text', ''), "url": tweet_url}
     except Exception as e:
-        logger.error(f"获取推文 {tweet_id} 时发生未知错误: {e}", exc_info=True)
-        return None
+        logger.error(f"ntscraper 抓取失败: {e}")
+
+    logger.error(f"所有非官方抓取手段均已失效: {tweet_url}")
+    return None
 
 # --- 重构后的 Gemini 总结与标签生成函数 ---
 def get_summary_and_tags(text: str, existing_tags: list[str]) -> dict | None:
@@ -253,7 +281,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # --- 主函数 ---
 def main() -> None:
     # 检查关键环境变量
-    if not all([TELEGRAM_BOT_TOKEN, TWITTER_BEARER_TOKEN, GEMINI_API_KEY, notion_utils.NOTION_API_KEY, notion_utils.NOTION_DATABASE_ID]):
+    if not all([TELEGRAM_BOT_TOKEN, GEMINI_API_KEY, notion_utils.NOTION_API_KEY, notion_utils.NOTION_DATABASE_ID]):
         logger.critical("一个或多个关键环境变量未设置！请检查 .env 文件。机器人无法启动。 ")
         return
 
