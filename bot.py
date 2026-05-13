@@ -41,7 +41,7 @@ if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         # models/gemini-2.5-flash
-        gemini_model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        gemini_model = genai.GenerativeModel('gemini-3.1-flash-lite')
         logger.info("Gemini API 配置成功。 ")
     except Exception as e:
         logger.error(f"配置 Gemini API 失败: {e}")
